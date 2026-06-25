@@ -18,9 +18,22 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration for REST and WebSockets
+// CORS configuration for REST and WebSockets supporting multiple dynamic origins
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'https://optimas-meet.vercel.app',
+  process.env.CLIENT_ORIGIN
+].filter(Boolean);
+
 const CORS_OPTIONS = {
-  origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', // Vite default port
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, postman, or curl requests)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
 };
