@@ -1,4 +1,5 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import authService from '../services/auth.service';
 
 const AuthContext = createContext(null);
 
@@ -7,106 +8,86 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('optimas_meet_token'));
   const [isLoading, setIsLoading] = useState(true);
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5005/api';
+  // Silent session verification on bootstrap / token updates
+  const verifySession = useCallback(async () => {
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    const verifySession = async () => {
-      if (!token) {
-        setIsLoading(false);
-        return;
+    try {
+      const result = await authService.getCurrentUser();
+      if (result.success) {
+        setUser(result.data);
+      } else {
+        // Fallback for failed check
+        handleLogout();
       }
-
-      try {
-        const response = await fetch(`${API_URL}/auth/me`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          setUser(result.data);
-        } else {
-          // Token expired or invalid
-          localStorage.removeItem('optimas_meet_token');
-          setToken(null);
-          setUser(null);
-        }
-      } catch (error) {
-        console.error('Session verification failed:', error);
-        // Do not delete token in case of intermittent network failure
-      } finally {
-        setIsLoading(false);
+    } catch (error) {
+      console.error('[AuthContext] Session validation failed:', error.message || error);
+      // Only delete token if it was a definitive client/auth rejection (like 401/403)
+      if (error.success === false) {
+        handleLogout();
       }
-    };
-
-    verifySession();
+    } finally {
+      setIsLoading(false);
+    }
   }, [token]);
 
+  useEffect(() => {
+    verifySession();
+  }, [verifySession]);
+
+  // Authenticate user
   const login = async (email, password) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const result = await response.json();
-
+      const result = await authService.login(email, password);
       if (result.success) {
-        const { user: loggedInUser, token: authToken } = result.data;
+        const { user: userData, token: authToken } = result.data;
         localStorage.setItem('optimas_meet_token', authToken);
         setToken(authToken);
-        setUser(loggedInUser);
+        setUser(userData);
         return { success: true };
       } else {
         return { success: false, error: result.message };
       }
     } catch (error) {
-      console.error('Login request failed:', error);
-      return { success: false, error: 'Network error, please try again' };
+      console.error('[AuthContext] Login request rejected:', error);
+      return { success: false, error: error.message || 'Server connection failed' };
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Sign up a new user profile
   const register = async (name, email, password) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      const result = await response.json();
-
+      const result = await authService.register(name, email, password);
       if (result.success) {
-        const { user: registeredUser, token: authToken } = result.data;
+        const { user: userData, token: authToken } = result.data;
         localStorage.setItem('optimas_meet_token', authToken);
         setToken(authToken);
-        setUser(registeredUser);
+        setUser(userData);
         return { success: true };
       } else {
         return { success: false, error: result.message };
       }
     } catch (error) {
-      console.error('Registration request failed:', error);
-      return { success: false, error: 'Network error, please try again' };
+      console.error('[AuthContext] Registration request rejected:', error);
+      return { success: false, error: error.message || 'Server connection failed' };
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
+  // Log out session
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('optimas_meet_token');
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
   const value = {
     user,
@@ -115,7 +96,7 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     login,
     register,
-    logout,
+    logout: handleLogout,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -128,3 +109,4 @@ export const useAuth = () => {
   }
   return context;
 };
+export default AuthContext;

@@ -21,8 +21,15 @@ export const Login = () => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!email || !password) {
-      setErrorMsg('Please enter both email and password.');
+    // Client-side validations
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !emailRegex.test(email)) {
+      setErrorMsg('Please enter a valid email address.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
       return;
     }
 
@@ -88,9 +95,9 @@ export const Login = () => {
                 <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-display">
                   Password
                 </label>
-                <span className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer font-light">
+                <Link to="/forgot-password" className="text-[11px] text-indigo-400 hover:text-indigo-300 font-light">
                   Forgot?
-                </span>
+                </Link>
               </div>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-500">

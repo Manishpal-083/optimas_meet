@@ -22,8 +22,20 @@ export const Register = () => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!name || !email || !password) {
-      setErrorMsg('Please populate name, email, and password.');
+    // Client-side validations
+    if (!name.trim() || name.trim().length < 2) {
+      setErrorMsg('Name must be at least 2 characters long.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !emailRegex.test(email)) {
+      setErrorMsg('Please enter a valid email address.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
       return;
     }
 
