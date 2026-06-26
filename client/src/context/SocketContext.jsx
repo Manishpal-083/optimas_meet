@@ -5,8 +5,8 @@ import { useAuth } from './AuthContext';
 const SocketContext = createContext(null);
 
 export const SocketProvider = ({ children }) => {
+  const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef(null);
   const { token, isAuthenticated } = useAuth();
 
   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5005';
@@ -14,9 +14,9 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     // Only connect if the user is authenticated
     if (!isAuthenticated || !token) {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
         setIsConnected(false);
       }
       return;
@@ -25,42 +25,40 @@ export const SocketProvider = ({ children }) => {
     console.log('[Socket] Initializing real-time websocket channel...');
     
     // Create socket connection
-    const socket = io(SOCKET_URL, {
+    const newSocket = io(SOCKET_URL, {
       auth: { token },
       transports: ['websocket', 'polling'],
       autoConnect: true,
       reconnectionAttempts: 5,
     });
 
-    socketRef.current = socket;
+    setSocket(newSocket);
 
-    socket.on('connect', () => {
-      console.log(`[Socket] Connected to server: ${socket.id}`);
+    newSocket.on('connect', () => {
+      console.log(`[Socket] Connected to server: ${newSocket.id}`);
       setIsConnected(true);
     });
 
-    socket.on('disconnect', (reason) => {
+    newSocket.on('disconnect', (reason) => {
       console.warn(`[Socket] Disconnected from server: ${reason}`);
       setIsConnected(false);
     });
 
-    socket.on('connect_error', (err) => {
+    newSocket.on('connect_error', (err) => {
       console.error('[Socket] Connection handshake error:', err.message);
     });
 
     // Cleanup on unmount or authentication state changes
     return () => {
-      if (socketRef.current) {
-        console.log('[Socket] Disconnecting socket instance...');
-        socketRef.current.disconnect();
-        socketRef.current = null;
-        setIsConnected(false);
-      }
+      console.log('[Socket] Disconnecting socket instance...');
+      newSocket.disconnect();
+      setSocket(null);
+      setIsConnected(false);
     };
   }, [isAuthenticated, token, SOCKET_URL]);
 
   const value = {
-    socket: socketRef.current,
+    socket,
     isConnected,
   };
 

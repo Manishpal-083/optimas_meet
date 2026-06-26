@@ -16,9 +16,15 @@ export const MeetingProvider = ({ children }) => {
   
   // Track screenshare track references to enable simple restoration
   const screenTrackRef = useRef(null);
+  // Track local stream reference to avoid hook dependency loops
+  const localStreamRef = useRef(null);
 
   // Initialize camera and microphone devices
   const startLocalStream = useCallback(async () => {
+    if (localStreamRef.current) {
+      console.log('[Media] Local stream already active, reusing...');
+      return localStreamRef.current;
+    }
     try {
       console.log('[Media] Requesting camera/microphone access...');
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -30,6 +36,7 @@ export const MeetingProvider = ({ children }) => {
         audio: true
       });
       
+      localStreamRef.current = stream;
       setLocalStream(stream);
       return stream;
     } catch (error) {
@@ -41,17 +48,19 @@ export const MeetingProvider = ({ children }) => {
 
   // Gracefully stop all media tracks
   const stopLocalStream = useCallback(() => {
-    if (localStream) {
+    if (localStreamRef.current) {
       console.log('[Media] Stopping local hardware streams...');
-      localStream.getTracks().forEach((track) => track.stop());
-      setLocalStream(null);
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
     }
-  }, [localStream]);
+    setLocalStream(null);
+  }, []);
 
   // Audio mute toggler
   const toggleAudio = useCallback(() => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
+    const stream = localStreamRef.current;
+    if (stream) {
+      const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         const newMuteState = !audioTrack.enabled;
@@ -61,12 +70,13 @@ export const MeetingProvider = ({ children }) => {
         }
       }
     }
-  }, [localStream, socket, isVideoMuted]);
+  }, [socket, isVideoMuted]);
 
   // Video feed toggler
   const toggleVideo = useCallback(() => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+    const stream = localStreamRef.current;
+    if (stream) {
+      const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         const newVideoMuteState = !videoTrack.enabled;
@@ -76,7 +86,7 @@ export const MeetingProvider = ({ children }) => {
         }
       }
     }
-  }, [localStream, socket, isAudioMuted]);
+  }, [socket, isAudioMuted]);
 
   // Boilerplate Screen Share Trigger
   const toggleScreenShare = useCallback(async (onTrackSwap) => {
@@ -119,15 +129,16 @@ export const MeetingProvider = ({ children }) => {
       screenTrackRef.current = null;
     }
 
-    if (onTrackSwap && typeof onTrackSwap === 'function' && localStream) {
-      const cameraTrack = localStream.getVideoTracks()[0];
+    const stream = localStreamRef.current;
+    if (onTrackSwap && typeof onTrackSwap === 'function' && stream) {
+      const cameraTrack = stream.getVideoTracks()[0];
       if (cameraTrack) {
         onTrackSwap(cameraTrack);
       }
     }
 
     setIsScreenSharing(false);
-  }, [localStream]);
+  }, []);
 
   const resetMeetingState = useCallback(() => {
     stopLocalStream();

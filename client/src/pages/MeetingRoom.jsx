@@ -59,10 +59,15 @@ export const MeetingRoom = () => {
 
   // Reference mute states to prevent dependency recalculation re-triggers
   const initialMuteStates = useRef({ audio: isAudioMuted, video: isVideoMuted });
+  const socketRef = useRef(socket);
 
-  // Connect local hardware media & socket room channel
   useEffect(() => {
-    let localStreamInstance = null;
+    socketRef.current = socket;
+  }, [socket]);
+
+  // 1. Initialize room validation and local media stream on mount or roomId change
+  useEffect(() => {
+    let isCancelled = false;
 
     const setupSession = async () => {
       try {
@@ -72,6 +77,8 @@ export const MeetingRoom = () => {
         
         // Validate room exists and fetch hostId
         const validation = await meetingService.validateMeeting(roomId);
+        if (isCancelled) return;
+
         if (!validation.success) {
           throw new Error('invalid-room');
         }
@@ -82,30 +89,16 @@ export const MeetingRoom = () => {
         setMeetingTitle(validation.data.title);
         
         // Start local video camera stream
-        localStreamInstance = await startLocalStream();
-        
+        await startLocalStream();
+        if (isCancelled) return;
+
         if (currentIsHost) {
           setRoomState('active');
-          if (socket && isConnected) {
-            socket.emit('join-room', {
-              roomId,
-              userId: user.id,
-              userName: user.name,
-              audioMuted: initialMuteStates.current.audio,
-              videoMuted: initialMuteStates.current.video
-            });
-          }
         } else {
           setRoomState('waiting');
-          if (socket && isConnected) {
-            socket.emit('request-join', {
-              roomId,
-              userId: user.id,
-              userName: user.name
-            });
-          }
         }
       } catch (err) {
+        if (isCancelled) return;
         console.error('Session setup failure:', err);
         const errorName = err.name || err.message;
         if (errorName === 'invalid-room' || err.message === 'invalid-room' || (err.response && err.response.status === 404)) {
@@ -122,20 +115,46 @@ export const MeetingRoom = () => {
           setRoomState('error');
         }
       } finally {
-        setIsMediaLoading(false);
+        if (!isCancelled) {
+          setIsMediaLoading(false);
+        }
       }
     };
 
     setupSession();
 
     return () => {
+      isCancelled = true;
       console.log('[MeetingRoom] Unmounting room, resetting state...');
-      if (socket) {
-        socket.emit('leave-room');
+      if (socketRef.current) {
+        socketRef.current.emit('leave-room');
       }
       resetMeetingState();
     };
-  }, [roomId, socket, isConnected, user, setRoomId, setMeetingTitle, startLocalStream, resetMeetingState]);
+  }, [roomId, user, startLocalStream, resetMeetingState, setRoomId, setMeetingTitle]);
+
+  // 2. Emit initial join-room or request-join when socket connects and session is ready
+  useEffect(() => {
+    if (!socket || !isConnected || roomState === 'loading' || roomState === 'error' || roomState === 'denied') return;
+
+    if (isHost && roomState === 'active') {
+      console.log('[MeetingRoom] Emitting join-room for Host:', roomId);
+      socket.emit('join-room', {
+        roomId,
+        userId: user.id,
+        userName: user.name,
+        audioMuted: initialMuteStates.current.audio,
+        videoMuted: initialMuteStates.current.video
+      });
+    } else if (!isHost && roomState === 'waiting') {
+      console.log('[MeetingRoom] Emitting request-join for Guest:', roomId);
+      socket.emit('request-join', {
+        roomId,
+        userId: user.id,
+        userName: user.name
+      });
+    }
+  }, [socket, isConnected, roomState, isHost, roomId, user]);
 
   // Socket chat & host-approval flow listeners
   useEffect(() => {
