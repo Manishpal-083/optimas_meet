@@ -1,6 +1,7 @@
 // WebRTC Signaling Event Coordinator.
 // Handles SDP negotiations and ICE candidate relaying between peers.
 
+const dbMock = require('../models/dbMock');
 const rooms = {}; // In-memory active room registry: { [roomId]: { [socketId]: { userId, userName } } }
 
 const registerWebRTCHandlers = (io, socket) => {
@@ -92,7 +93,47 @@ const registerWebRTCHandlers = (io, socket) => {
     }
   });
 
-  // 6. Explicit Room Leave
+  // 6. Request Admission to waiting room
+  socket.on('request-join', ({ roomId, userId, userName }) => {
+    console.log(`[Socket] User ${userName} requesting admission to room ${roomId}`);
+    
+    // Retrieve meeting metadata from database mock
+    const meeting = dbMock.findMeetingByRoomId(roomId);
+    if (!meeting) {
+      return socket.emit('join-error', { message: 'Meeting room not found' });
+    }
+
+    // Find the host's socket ID in the active registry
+    const hostSocketId = Object.keys(rooms[roomId] || {}).find(
+      (sid) => rooms[roomId][sid] && rooms[roomId][sid].userId === meeting.hostId
+    );
+
+    if (hostSocketId) {
+      // Forward admission request to host socket
+      io.to(hostSocketId).emit('join-request', {
+        socketId: socket.id,
+        userId,
+        userName
+      });
+    } else {
+      // Host is not in the room yet
+      socket.emit('join-error', { message: 'Host is not present in the meeting yet. Please try again later.' });
+    }
+  });
+
+  // 7. Approve join request
+  socket.on('approve-join', ({ targetSocketId }) => {
+    console.log(`[Socket] Host approved admission for socket: ${targetSocketId}`);
+    io.to(targetSocketId).emit('join-approved');
+  });
+
+  // 8. Deny join request
+  socket.on('deny-join', ({ targetSocketId }) => {
+    console.log(`[Socket] Host denied admission for socket: ${targetSocketId}`);
+    io.to(targetSocketId).emit('join-denied');
+  });
+
+  // 9. Explicit Room Leave
   socket.on('leave-room', () => {
     handleUserLeaving(io, socket);
   });
