@@ -6,7 +6,7 @@ const rooms = {}; // In-memory active room registry: { [roomId]: { [socketId]: {
 const registerWebRTCHandlers = (io, socket) => {
   
   // 1. Join Room
-  socket.on('join-room', ({ roomId, userId, userName }) => {
+  socket.on('join-room', ({ roomId, userId, userName, audioMuted, videoMuted }) => {
     console.log(`[Socket] User ${userName} (${userId}) joining room ${roomId}`);
     
     // Join socket room
@@ -22,7 +22,7 @@ const registerWebRTCHandlers = (io, socket) => {
     }
     
     // Map socket ID to metadata
-    rooms[roomId][socket.id] = { userId, userName };
+    rooms[roomId][socket.id] = { userId, userName, audioMuted: !!audioMuted, videoMuted: !!videoMuted };
 
     // Get list of other participants currently in the room
     const otherUsers = Object.keys(rooms[roomId])
@@ -30,7 +30,9 @@ const registerWebRTCHandlers = (io, socket) => {
       .map((sid) => ({
         socketId: sid,
         userId: rooms[roomId][sid].userId,
-        userName: rooms[roomId][sid].userName
+        userName: rooms[roomId][sid].userName,
+        audioMuted: rooms[roomId][sid].audioMuted,
+        videoMuted: rooms[roomId][sid].videoMuted
       }));
 
     // Send back current users list to the joining user
@@ -40,7 +42,9 @@ const registerWebRTCHandlers = (io, socket) => {
     socket.to(roomId).emit('user-connected', {
       socketId: socket.id,
       userId,
-      userName
+      userName,
+      audioMuted: !!audioMuted,
+      videoMuted: !!videoMuted
     });
   });
 
@@ -73,7 +77,22 @@ const registerWebRTCHandlers = (io, socket) => {
     });
   });
 
-  // 5. Explicit Room Leave
+  // 5. Mute / Camera toggle event synchronization
+  socket.on('mute-toggle', ({ audioMuted, videoMuted }) => {
+    const roomId = socket.roomId;
+    if (roomId && rooms[roomId] && rooms[roomId][socket.id]) {
+      rooms[roomId][socket.id].audioMuted = audioMuted;
+      rooms[roomId][socket.id].videoMuted = videoMuted;
+      
+      socket.to(roomId).emit('peer-mute-toggle', {
+        socketId: socket.id,
+        audioMuted,
+        videoMuted
+      });
+    }
+  });
+
+  // 6. Explicit Room Leave
   socket.on('leave-room', () => {
     handleUserLeaving(io, socket);
   });

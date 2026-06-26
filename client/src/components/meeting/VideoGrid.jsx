@@ -41,6 +41,7 @@ export const VideoGrid = () => {
             isLocal={false}
             isAudioMuted={peer.audioMuted || false}
             isVideoMuted={peer.videoMuted || false}
+            connectionStatus={peer.connectionStatus || 'connecting'}
           />
         ))}
 

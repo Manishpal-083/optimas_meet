@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { MicOff, User, Volume2 } from 'lucide-react';
+import { MicOff, User, Volume2, Loader2, AlertTriangle } from 'lucide-react';
 
 export const VideoTile = ({ 
   stream, 
   userName, 
   isLocal, 
   isAudioMuted, 
-  isVideoMuted 
+  isVideoMuted,
+  connectionStatus = 'connected'
 }) => {
   const videoRef = useRef(null);
 
@@ -17,6 +18,8 @@ export const VideoTile = ({
   }, [stream]);
 
   const showVideoPlaceholder = isVideoMuted || !stream;
+  const isConnecting = connectionStatus === 'connecting' || connectionStatus === 'checking';
+  const isFailed = connectionStatus === 'failed' || connectionStatus === 'disconnected';
 
   return (
     <div className="relative group w-full h-full rounded-2xl overflow-hidden bg-slate-900 border border-white/5 shadow-2xl transition-all duration-300 hover:border-indigo-500/30">
@@ -39,6 +42,22 @@ export const VideoTile = ({
           <span className="mt-3 text-xs font-medium font-display tracking-wider text-slate-400">
             Video Off
           </span>
+        </div>
+      )}
+
+      {/* WebRTC Connection Status Spinner Overlay */}
+      {isConnecting && (
+        <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center text-slate-300">
+          <Loader2 className="h-7 w-7 text-indigo-400 animate-spin mb-2" />
+          <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-display">Connecting Peer...</span>
+        </div>
+      )}
+
+      {/* WebRTC Connection Status Failed Overlay */}
+      {isFailed && (
+        <div className="absolute inset-0 z-20 bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center text-rose-400">
+          <AlertTriangle className="h-8 w-8 text-rose-500 mb-2 animate-bounce" />
+          <span className="text-[10px] uppercase font-bold tracking-wider font-display">Connection Lost</span>
         </div>
       )}
 

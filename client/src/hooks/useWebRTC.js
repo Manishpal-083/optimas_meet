@@ -68,6 +68,16 @@ export const useWebRTC = () => {
     // Connection state changes logging
     pc.onconnectionstatechange = () => {
       console.log(`[WebRTC] Connection status for ${targetSocketId}: ${pc.connectionState}`);
+      
+      setParticipants((prev) => {
+        return prev.map((p) => {
+          if (p.socketId === targetSocketId) {
+            return { ...p, connectionStatus: pc.connectionState };
+          }
+          return p;
+        });
+      });
+
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
         closePeerConnection(targetSocketId);
         setParticipants((prev) => prev.filter((p) => p.socketId !== targetSocketId));
@@ -101,7 +111,11 @@ export const useWebRTC = () => {
       console.log('[WebRTC] Room users received:', otherUsers);
       
       // Initialize participant placeholder records
-      setParticipants(otherUsers.map(u => ({ ...u, stream: null })));
+      setParticipants(otherUsers.map(u => ({ 
+        ...u, 
+        stream: null, 
+        connectionStatus: 'connecting' 
+      })));
 
       // Initiate WebRTC offers to everyone already in the room
       for (const peer of otherUsers) {
@@ -124,13 +138,21 @@ export const useWebRTC = () => {
     };
 
     // 2. Receive connection notifications from new users
-    const handleUserConnected = ({ socketId, userId, userName }) => {
+    const handleUserConnected = ({ socketId, userId, userName, audioMuted, videoMuted }) => {
       console.log(`[WebRTC] Peer joined room: ${userName} (${socketId})`);
       
       // Register placeholder for new user
       setParticipants((prev) => {
         if (prev.some(p => p.socketId === socketId)) return prev;
-        return [...prev, { socketId, userId, userName, stream: null }];
+        return [...prev, { 
+          socketId, 
+          userId, 
+          userName, 
+          stream: null, 
+          audioMuted: !!audioMuted, 
+          videoMuted: !!videoMuted,
+          connectionStatus: 'connecting'
+        }];
       });
     };
 
@@ -139,9 +161,18 @@ export const useWebRTC = () => {
       console.log(`[WebRTC] Received SDP Offer from ${senderSocketId}`);
       
       try {
-        // Find matching participant to get userName
+        // Resolve actual userName from active participant list
+        let resolvedUserName = 'Peer';
+        setParticipants((prev) => {
+          const match = prev.find(p => p.socketId === senderSocketId);
+          if (match) {
+            resolvedUserName = match.userName;
+          }
+          return prev;
+        });
+
         // Create peer connection (this user is the receiver, so isInitiator is false)
-        const pc = createPeerConnection(senderSocketId, 'Peer', false);
+        const pc = createPeerConnection(senderSocketId, resolvedUserName, false);
         
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
         
@@ -191,6 +222,18 @@ export const useWebRTC = () => {
       setParticipants((prev) => prev.filter((p) => p.socketId !== socketId));
     };
 
+    // 7. Peer mute toggled
+    const handlePeerMuteToggle = ({ socketId, audioMuted, videoMuted }) => {
+      setParticipants((prev) => {
+        return prev.map((p) => {
+          if (p.socketId === socketId) {
+            return { ...p, audioMuted, videoMuted };
+          }
+          return p;
+        });
+      });
+    };
+
     // Register socket listeners
     socket.on('room-users', handleRoomUsers);
     socket.on('user-connected', handleUserConnected);
@@ -198,6 +241,7 @@ export const useWebRTC = () => {
     socket.on('sdp-answer', handleSdpAnswer);
     socket.on('ice-candidate', handleIceCandidate);
     socket.on('user-disconnected', handleUserDisconnected);
+    socket.on('peer-mute-toggle', handlePeerMuteToggle);
 
     // Clean up connections on unmount/stream changes
     return () => {
@@ -207,6 +251,7 @@ export const useWebRTC = () => {
       socket.off('sdp-answer', handleSdpAnswer);
       socket.off('ice-candidate', handleIceCandidate);
       socket.off('user-disconnected', handleUserDisconnected);
+      socket.off('peer-mute-toggle', handlePeerMuteToggle);
 
       console.log('[WebRTC] Resetting all peer connection tracks...');
       Object.keys(peerConnections.current).forEach(closePeerConnection);

@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { useSocket } from './SocketContext';
 
 const MeetingContext = createContext(null);
 
 export const MeetingProvider = ({ children }) => {
+  const { socket } = useSocket();
   const [roomId, setRoomId] = useState(null);
   const [meetingTitle, setMeetingTitle] = useState('');
   const [participants, setParticipants] = useState([]); // List of peers: { socketId, userId, userName, stream, audioMuted, videoMuted }
@@ -52,10 +54,14 @@ export const MeetingProvider = ({ children }) => {
       const audioTrack = localStream.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
-        setIsAudioMuted(!audioTrack.enabled);
+        const newMuteState = !audioTrack.enabled;
+        setIsAudioMuted(newMuteState);
+        if (socket) {
+          socket.emit('mute-toggle', { audioMuted: newMuteState, videoMuted: isVideoMuted });
+        }
       }
     }
-  }, [localStream]);
+  }, [localStream, socket, isVideoMuted]);
 
   // Video feed toggler
   const toggleVideo = useCallback(() => {
@@ -63,10 +69,14 @@ export const MeetingProvider = ({ children }) => {
       const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoMuted(!videoTrack.enabled);
+        const newVideoMuteState = !videoTrack.enabled;
+        setIsVideoMuted(newVideoMuteState);
+        if (socket) {
+          socket.emit('mute-toggle', { audioMuted: isAudioMuted, videoMuted: newVideoMuteState });
+        }
       }
     }
-  }, [localStream]);
+  }, [localStream, socket, isAudioMuted]);
 
   // Boilerplate Screen Share Trigger
   const toggleScreenShare = useCallback(async (onTrackSwap) => {
