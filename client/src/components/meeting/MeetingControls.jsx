@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useMeeting } from '../../context/MeetingContext';
 
-export const MeetingControls = ({ onLeave, onTrackSwap }) => {
+export const MeetingControls = ({ onLeave, onTrackSwap, onAudioTrackSwap }) => {
   const {
     isAudioMuted,
     isVideoMuted,
@@ -34,7 +34,7 @@ export const MeetingControls = ({ onLeave, onTrackSwap }) => {
         
         {/* Toggle Audio */}
         <button
-          onClick={toggleAudio}
+          onClick={() => toggleAudio(onAudioTrackSwap)}
           className={`flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 shadow-md ${
             isAudioMuted 
               ? 'bg-rose-500 text-white hover:bg-rose-600' 

@@ -54,6 +54,16 @@ export const useWebRTC = () => {
     });
   }, []);
 
+  // Track replacement helper for audio muting/unmuting
+  const replaceAudioTrack = useCallback((newTrack) => {
+    Object.values(peerConnections.current).forEach((pc) => {
+      const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+      if (sender) {
+        sender.replaceTrack(newTrack);
+      }
+    });
+  }, []);
+
   // Process queued candidates after remote description is set
   const processQueuedCandidates = useCallback(async (socketId) => {
     const pc = peerConnections.current[socketId];
@@ -301,6 +311,7 @@ export const useWebRTC = () => {
   return {
     peerConnections: peerConnections.current,
     replaceVideoTrack,
+    replaceAudioTrack,
   };
 };
 export default useWebRTC;

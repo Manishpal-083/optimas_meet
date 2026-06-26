@@ -48,7 +48,7 @@ export const MeetingRoom = () => {
   const [joinErrorMessage, setJoinErrorMessage] = useState('');
 
   // Initialize WebRTC signaling hooks
-  const { replaceVideoTrack } = useWebRTC();
+  const { replaceVideoTrack, replaceAudioTrack } = useWebRTC();
 
   // Scroll to bottom of chat
   useEffect(() => {
@@ -634,6 +634,7 @@ export const MeetingRoom = () => {
       <MeetingControls 
         onLeave={handleLeaveCall} 
         onTrackSwap={replaceVideoTrack}
+        onAudioTrackSwap={replaceAudioTrack}
       />
     </div>
   );

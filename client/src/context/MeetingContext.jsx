@@ -57,20 +57,59 @@ export const MeetingProvider = ({ children }) => {
   }, []);
 
   // Audio mute toggler
-  const toggleAudio = useCallback(() => {
+  const toggleAudio = useCallback(async (onTrackSwap) => {
     const stream = localStreamRef.current;
-    if (stream) {
+    if (!stream) return;
+
+    if (!isAudioMuted) {
+      // Mute audio
+      console.log('[Media] Muting microphone (OFF)...');
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        const newMuteState = !audioTrack.enabled;
-        setIsAudioMuted(newMuteState);
-        if (socket) {
-          socket.emit('mute-toggle', { audioMuted: newMuteState, videoMuted: isVideoMuted });
+        audioTrack.stop();
+        audioTrack.enabled = false;
+      }
+      setIsAudioMuted(true);
+      if (socket) {
+        socket.emit('mute-toggle', { audioMuted: true, videoMuted: isVideoMuted });
+      }
+    } else {
+      // Unmute audio
+      console.log('[Media] Unmuting microphone (ON)...');
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false
+        });
+        const newAudioTrack = newStream.getAudioTracks()[0];
+
+        // Remove old track and add new one to the stream
+        const oldTrack = stream.getAudioTracks()[0];
+        if (oldTrack) {
+          stream.removeTrack(oldTrack);
         }
+        stream.addTrack(newAudioTrack);
+
+        // Update localStream representation for local display
+        const updatedStream = new MediaStream(stream.getTracks());
+        localStreamRef.current = updatedStream;
+        setLocalStream(updatedStream);
+
+        // Swap track in RTCPeerConnections
+        if (onTrackSwap && typeof onTrackSwap === 'function') {
+          onTrackSwap(newAudioTrack);
+        }
+
+        setIsAudioMuted(false);
+        if (socket) {
+          socket.emit('mute-toggle', { audioMuted: false, videoMuted: isVideoMuted });
+        }
+      } catch (err) {
+        console.error('[Media] Failed to restart microphone:', err);
+        alert('Microphone access denied or unavailable. Please check permissions.');
       }
     }
-  }, [socket, isVideoMuted]);
+  }, [socket, isAudioMuted, isVideoMuted]);
 
   // Video feed toggler
   const toggleVideo = useCallback(async (onTrackSwap) => {
