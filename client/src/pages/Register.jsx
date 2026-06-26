@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Mail, Lock, User, UserPlus, AlertCircle } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 
@@ -11,12 +11,15 @@ export const Register = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const { register, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = location.state?.from?.pathname || '/';
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/');
+      navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, from]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -155,7 +158,7 @@ export const Register = () => {
           {/* Switch Tab */}
           <div className="mt-8 text-center text-xs text-slate-400">
             Already have an account?{' '}
-            <Link to="/login" className="font-semibold text-indigo-400 hover:underline">
+            <Link to="/login" state={location.state} className="font-semibold text-indigo-400 hover:underline">
               Sign In
             </Link>
           </div>

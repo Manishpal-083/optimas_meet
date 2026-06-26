@@ -28,11 +28,31 @@ const ALLOWED_ORIGINS = [
 const CORS_OPTIONS = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, postman, or curl requests)
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    if (!origin) {
+      return callback(null, true);
     }
+
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+
+    try {
+      const parsedUrl = new URL(origin);
+      const hostname = parsedUrl.hostname;
+      
+      // Allow any Vercel subdomains (including preview deployments) and local developments
+      if (
+        hostname.endsWith('.vercel.app') || 
+        hostname === 'localhost' || 
+        hostname === '127.0.0.1'
+      ) {
+        return callback(null, true);
+      }
+    } catch (err) {
+      // Invalid URL syntax in origin header
+    }
+
+    callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,

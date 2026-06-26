@@ -21,6 +21,8 @@ export const useWebRTC = () => {
 
   // Keep references to peer connections: { [socketId]: RTCPeerConnection }
   const peerConnections = useRef({});
+  // Queue for incoming ICE candidates before remote description is set
+  const queuedCandidates = useRef({});
 
   // Clean up a specific peer connection
   const closePeerConnection = useCallback((socketId) => {
@@ -28,6 +30,9 @@ export const useWebRTC = () => {
       console.log(`[WebRTC] Closing peer connection for: ${socketId}`);
       peerConnections.current[socketId].close();
       delete peerConnections.current[socketId];
+    }
+    if (queuedCandidates.current[socketId]) {
+      delete queuedCandidates.current[socketId];
     }
   }, []);
 
@@ -39,6 +44,23 @@ export const useWebRTC = () => {
         sender.replaceTrack(newTrack);
       }
     });
+  }, []);
+
+  // Process queued candidates after remote description is set
+  const processQueuedCandidates = useCallback(async (socketId) => {
+    const pc = peerConnections.current[socketId];
+    const candidates = queuedCandidates.current[socketId];
+    if (pc && pc.remoteDescription && pc.remoteDescription.type && candidates && candidates.length > 0) {
+      console.log(`[WebRTC] Processing ${candidates.length} queued ICE candidates for ${socketId}`);
+      queuedCandidates.current[socketId] = [];
+      for (const candidate of candidates) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.error(`[WebRTC] Failed to add queued ICE candidate for ${socketId}:`, err);
+        }
+      }
+    }
   }, []);
 
   // Create an RTCPeerConnection instance
@@ -175,6 +197,7 @@ export const useWebRTC = () => {
         const pc = createPeerConnection(senderSocketId, resolvedUserName, false);
         
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        await processQueuedCandidates(senderSocketId);
         
         // Create SDP Answer
         const answer = await pc.createAnswer();
@@ -197,6 +220,7 @@ export const useWebRTC = () => {
       if (pc) {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          await processQueuedCandidates(senderSocketId);
         } catch (err) {
           console.error(`[WebRTC] Failed to set remote description for ${senderSocketId}:`, err);
         }
@@ -206,12 +230,18 @@ export const useWebRTC = () => {
     // 5. Receive ICE Candidates
     const handleIceCandidate = async ({ senderSocketId, candidate }) => {
       const pc = peerConnections.current[senderSocketId];
-      if (pc) {
+      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
           console.error(`[WebRTC] Failed to add ICE candidate from ${senderSocketId}:`, err);
         }
+      } else {
+        console.log(`[WebRTC] Connection/remote description not ready for ${senderSocketId}, queuing candidate.`);
+        if (!queuedCandidates.current[senderSocketId]) {
+          queuedCandidates.current[senderSocketId] = [];
+        }
+        queuedCandidates.current[senderSocketId].push(candidate);
       }
     };
 
@@ -255,8 +285,9 @@ export const useWebRTC = () => {
 
       console.log('[WebRTC] Resetting all peer connection tracks...');
       Object.keys(peerConnections.current).forEach(closePeerConnection);
+      queuedCandidates.current = {};
     };
-  }, [socket, roomId, localStream, createPeerConnection, closePeerConnection, setParticipants]);
+  }, [socket, roomId, localStream, createPeerConnection, closePeerConnection, processQueuedCandidates, setParticipants]);
 
   return {
     peerConnections: peerConnections.current,
