@@ -73,20 +73,63 @@ export const MeetingProvider = ({ children }) => {
   }, [socket, isVideoMuted]);
 
   // Video feed toggler
-  const toggleVideo = useCallback(() => {
+  const toggleVideo = useCallback(async (onTrackSwap) => {
     const stream = localStreamRef.current;
-    if (stream) {
+    if (!stream) return;
+
+    if (!isVideoMuted) {
+      // Turn OFF video
+      console.log('[Media] Turning camera OFF...');
       const videoTrack = stream.getVideoTracks()[0];
       if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        const newVideoMuteState = !videoTrack.enabled;
-        setIsVideoMuted(newVideoMuteState);
-        if (socket) {
-          socket.emit('mute-toggle', { audioMuted: isAudioMuted, videoMuted: newVideoMuteState });
+        videoTrack.stop();
+        videoTrack.enabled = false;
+      }
+      setIsVideoMuted(true);
+      if (socket) {
+        socket.emit('mute-toggle', { audioMuted: isAudioMuted, videoMuted: true });
+      }
+    } else {
+      // Turn ON video
+      console.log('[Media] Turning camera ON...');
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user'
+          },
+          audio: false
+        });
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        
+        // Remove old track and add new one to the stream
+        const oldTrack = stream.getVideoTracks()[0];
+        if (oldTrack) {
+          stream.removeTrack(oldTrack);
         }
+        stream.addTrack(newVideoTrack);
+
+        // Update localStream representation for local display
+        const updatedStream = new MediaStream(stream.getTracks());
+        localStreamRef.current = updatedStream;
+        setLocalStream(updatedStream);
+
+        // Swap track in RTCPeerConnections
+        if (onTrackSwap && typeof onTrackSwap === 'function') {
+          onTrackSwap(newVideoTrack);
+        }
+
+        setIsVideoMuted(false);
+        if (socket) {
+          socket.emit('mute-toggle', { audioMuted: isAudioMuted, videoMuted: false });
+        }
+      } catch (err) {
+        console.error('[Media] Failed to restart camera:', err);
+        alert('Camera access denied or unavailable. Please check permissions.');
       }
     }
-  }, [socket, isAudioMuted]);
+  }, [socket, isAudioMuted, isVideoMuted]);
 
   // Boilerplate Screen Share Trigger
   const toggleScreenShare = useCallback(async (onTrackSwap) => {

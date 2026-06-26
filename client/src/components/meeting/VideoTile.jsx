@@ -25,15 +25,15 @@ export const VideoTile = ({
     <div className="relative group w-full h-full rounded-2xl overflow-hidden bg-slate-900 border border-white/5 shadow-2xl transition-all duration-300 hover:border-indigo-500/30">
       
       {/* Video Feed */}
-      {!showVideoPlaceholder ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal} // Avoid local echo feedback loop
-          className="w-full h-full object-cover scale-x-[-1]" // mirror local camera feed
-        />
-      ) : (
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={isLocal} // Avoid local echo feedback loop
+        className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''} ${showVideoPlaceholder ? 'hidden' : ''}`}
+      />
+
+      {showVideoPlaceholder && (
         /* Video Muted / Off Avatar Placeholder */
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-400">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-800 border border-white/5 ring-4 ring-indigo-500/10 group-hover:scale-105 transition-transform duration-300">

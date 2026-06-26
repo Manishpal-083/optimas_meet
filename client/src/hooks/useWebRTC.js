@@ -24,6 +24,14 @@ export const useWebRTC = () => {
   // Queue for incoming ICE candidates before remote description is set
   const queuedCandidates = useRef({});
 
+  // Decouple peer connection track additions from localStream state updates
+  const localStreamRef = useRef(localStream);
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  const hasLocalStream = !!localStream;
+
   // Clean up a specific peer connection
   const closePeerConnection = useCallback((socketId) => {
     if (peerConnections.current[socketId]) {
@@ -70,10 +78,11 @@ export const useWebRTC = () => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnections.current[targetSocketId] = pc;
 
-    // Add local media tracks to the connection
-    if (localStream) {
-      localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, localStream);
+    // Add local media tracks to the connection from the active stream reference
+    const activeStream = localStreamRef.current;
+    if (activeStream) {
+      activeStream.getTracks().forEach((track) => {
+        pc.addTrack(track, activeStream);
       });
     }
 
@@ -123,10 +132,10 @@ export const useWebRTC = () => {
     };
 
     return pc;
-  }, [localStream, socket, closePeerConnection, setParticipants]);
+  }, [socket, closePeerConnection, setParticipants]);
 
   useEffect(() => {
-    if (!socket || !roomId || !localStream) return;
+    if (!socket || !roomId || !hasLocalStream) return;
 
     // 1. Receive users already in room
     const handleRoomUsers = async (otherUsers) => {
@@ -287,7 +296,7 @@ export const useWebRTC = () => {
       Object.keys(peerConnections.current).forEach(closePeerConnection);
       queuedCandidates.current = {};
     };
-  }, [socket, roomId, localStream, createPeerConnection, closePeerConnection, processQueuedCandidates, setParticipants]);
+  }, [socket, roomId, hasLocalStream, createPeerConnection, closePeerConnection, processQueuedCandidates, setParticipants]);
 
   return {
     peerConnections: peerConnections.current,

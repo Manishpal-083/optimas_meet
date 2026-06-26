@@ -47,7 +47,7 @@ export const MeetingControls = ({ onLeave, onTrackSwap }) => {
 
         {/* Toggle Video */}
         <button
-          onClick={toggleVideo}
+          onClick={() => toggleVideo(onTrackSwap)}
           className={`flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 shadow-md ${
             isVideoMuted 
               ? 'bg-rose-500 text-white hover:bg-rose-600' 
